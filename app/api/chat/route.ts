@@ -65,7 +65,7 @@ export async function POST(req: Request) {
       tools,
       // Keep the agent looping across tool calls (replaces the v4 client-side
       // `maxSteps`).
-      stopWhen: stepCountIs(30),
+      stopWhen: stepCountIs(10),
     });
 
     // Create response stream
