@@ -57,7 +57,7 @@ export async function POST(req: Request) {
       // `gemini-2.5-flash` is used (not `-lite`) because lite is too weak at
       // multi-step agentic planning: it tends to perform a single action and
       // then stop instead of carrying a task through to completion.
-      model: google("gemini-2.5-flash-lite"),
+      model: google("gemini-2.5-flash"),
       system: SYSTEM_PROMPT,
       messages: await convertToModelMessages(prunedMessages(messages), {
         tools,
