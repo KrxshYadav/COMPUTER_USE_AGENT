@@ -1,12 +1,12 @@
 "use client";
 
-import type { Message } from "ai";
+import type { UIMessage } from "ai";
 import { AnimatePresence, motion } from "motion/react";
 import { memo } from "react";
 import equal from "fast-deep-equal";
 import { Streamdown } from "streamdown";
 
-import { ABORTED, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import {
   Camera,
   CheckCircle,
@@ -21,12 +21,26 @@ import {
   StopCircle,
 } from "lucide-react";
 
+// The computer tool's input/output are typed as `unknown` on a generic
+// UIMessage, so we describe their concrete shapes for rendering.
+type ComputerInput = {
+  action: string;
+  coordinate?: [number, number];
+  text?: string;
+  duration?: number;
+  scroll_amount?: number;
+  scroll_direction?: string;
+};
+type ComputerOutput =
+  | { type: "image"; data: string }
+  | { type: "text"; text: string };
+
 const PurePreviewMessage = ({
   message,
   isLatestMessage,
   status,
 }: {
-  message: Message;
+  message: UIMessage;
   isLoading: boolean;
   status: "error" | "submitted" | "streaming" | "ready";
   isLatestMessage: boolean;
@@ -75,11 +89,16 @@ const PurePreviewMessage = ({
                       </div>
                     </motion.div>
                   );
-                case "tool-invocation":
-                  const { toolName, toolCallId, state, args } =
-                    part.toolInvocation;
-
-                  if (toolName === "computer") {
+                case "tool-computer": {
+                  const { state } = part;
+                  const input = (part.input ?? {}) as ComputerInput;
+                  const output =
+                    state === "output-available"
+                      ? (part.output as ComputerOutput)
+                      : undefined;
+                  const pending =
+                    state === "input-streaming" || state === "input-available";
+                  {
                     const {
                       action,
                       coordinate,
@@ -87,7 +106,7 @@ const PurePreviewMessage = ({
                       duration,
                       scroll_amount,
                       scroll_direction,
-                    } = args;
+                    } = input;
                     let actionLabel = "";
                     let actionDetail = "";
                     let ActionIcon = null;
@@ -176,86 +195,76 @@ const PurePreviewMessage = ({
                             </div>
                           </div>
                           <div className="w-5 h-5 flex items-center justify-center">
-                            {state === "call" ? (
+                            {pending ? (
                               isLatestMessage && status !== "ready" ? (
                                 <Loader2 className="animate-spin h-4 w-4 text-zinc-500" />
                               ) : (
                                 <StopCircle className="h-4 w-4 text-red-500" />
                               )
-                            ) : state === "result" ? (
-                              part.toolInvocation.result === ABORTED ? (
-                                <CircleSlash
-                                size={14}
-                                className="text-amber-600"
-                                />                              ) : (
-                                <CheckCircle
-                                  size={14}
-                                  className="text-green-600"
-                                />
-                              )
+                            ) : state === "output-error" ? (
+                              <CircleSlash size={14} className="text-amber-600" />
+                            ) : state === "output-available" ? (
+                              <CheckCircle size={14} className="text-green-600" />
                             ) : null}
                           </div>
                         </div>
-                        {state === "result" ? (
-                          part.toolInvocation.result.type === "image" && (
-                            <div className="p-2">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={`data:image/png;base64,${part.toolInvocation.result.data}`}
-                                alt="Generated Image"
-                                className="w-full aspect-[1024/768] rounded-sm"
-                              />
-                            </div>
-                          )
-                        ) : action === "screenshot" ? (
+                        {output?.type === "image" ? (
+                          <div className="p-2">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={`data:image/png;base64,${output.data}`}
+                              alt="Generated Image"
+                              className="w-full aspect-[1024/768] rounded-sm"
+                            />
+                          </div>
+                        ) : pending && action === "screenshot" ? (
                           <div className="w-full aspect-[1024/768] rounded-sm bg-zinc-200 dark:bg-zinc-800 animate-pulse"></div>
                         ) : null}
                       </motion.div>
                     );
                   }
-                  if (toolName === "bash") {
-                    const { command } = args;
+                }
+                case "tool-bash": {
+                  const { toolCallId, state } = part;
+                  const input = (part.input ?? {}) as { command?: string };
+                  const command = input.command ?? "";
+                  const pending =
+                    state === "input-streaming" || state === "input-available";
 
-                    return (
-                      <motion.div
-                        initial={{ y: 5, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        key={`message-${message.id}-part-${i}`}
-                        className="flex items-center gap-2 p-2 mb-3 text-sm bg-zinc-50 dark:bg-zinc-900 rounded-md border border-zinc-200 dark:border-zinc-800"
-                      >
-                        <div className="flex items-center justify-center w-8 h-8 bg-zinc-50 dark:bg-zinc-800 rounded-full">
-                          <ScrollText className="w-4 h-4" />
-                        </div>
-                        <div className="flex-1">
-                          <div className="font-medium flex items-baseline gap-2">
-                            Running command
-                            <span className="text-xs text-zinc-500 dark:text-zinc-400 font-normal">
-                              {command.slice(0, 40)}...
-                            </span>
-                          </div>
-                        </div>
-                        <div className="w-5 h-5 flex items-center justify-center">
-                          {state === "call" ? (
-                            isLatestMessage && status !== "ready" ? (
-                              <Loader2 className="animate-spin h-4 w-4 text-zinc-500" />
-                            ) : (
-                              <StopCircle className="h-4 w-4 text-red-500" />
-                            )
-                          ) : state === "result" ? (
-                            <CheckCircle size={14} className="text-green-600" />
-                          ) : null}
-                        </div>
-                      </motion.div>
-                    );
-                  }
                   return (
-                    <div key={toolCallId}>
-                      <h3>
-                        {toolName}: {state}
-                      </h3>
-                      <pre>{JSON.stringify(args, null, 2)}</pre>
-                    </div>
+                    <motion.div
+                      initial={{ y: 5, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      key={`message-${message.id}-part-${i}-${toolCallId}`}
+                      className="flex items-center gap-2 p-2 mb-3 text-sm bg-zinc-50 dark:bg-zinc-900 rounded-md border border-zinc-200 dark:border-zinc-800"
+                    >
+                      <div className="flex items-center justify-center w-8 h-8 bg-zinc-50 dark:bg-zinc-800 rounded-full">
+                        <ScrollText className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium flex items-baseline gap-2">
+                          Running command
+                          <span className="text-xs text-zinc-500 dark:text-zinc-400 font-normal">
+                            {command.slice(0, 40)}...
+                          </span>
+                        </div>
+                      </div>
+                      <div className="w-5 h-5 flex items-center justify-center">
+                        {pending ? (
+                          isLatestMessage && status !== "ready" ? (
+                            <Loader2 className="animate-spin h-4 w-4 text-zinc-500" />
+                          ) : (
+                            <StopCircle className="h-4 w-4 text-red-500" />
+                          )
+                        ) : state === "output-error" ? (
+                          <CircleSlash size={14} className="text-amber-600" />
+                        ) : state === "output-available" ? (
+                          <CheckCircle size={14} className="text-green-600" />
+                        ) : null}
+                      </div>
+                    </motion.div>
                   );
+                }
 
                 default:
                   return null;
@@ -272,9 +281,6 @@ export const PreviewMessage = memo(
   PurePreviewMessage,
   (prevProps, nextProps) => {
     if (prevProps.status !== nextProps.status) return false;
-    if (prevProps.message.annotations !== nextProps.message.annotations)
-      return false;
-    // if (prevProps.message.content !== nextProps.message.content) return false;
     if (!equal(prevProps.message.parts, nextProps.message.parts)) return false;
 
     return true;

@@ -3,7 +3,7 @@
 </a>
 
 <p align="center">
-  An open-source AI chatbot demonstrating computer use capabilities with Anthropic Claude Sonnet 4.5, Vercel Sandboxes, and the AI SDK by Vercel.
+  An open-source AI chatbot demonstrating computer use capabilities with Google Gemini, Vercel Sandboxes, and the AI SDK by Vercel.
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
 ## Features
 
 - Streaming text responses powered by the [AI SDK](https://sdk.vercel.ai/docs).
-- Anthropic Claude Sonnet 4.5 with [computer use](https://sdk.vercel.ai/docs/guides/computer-use) and bash tool capabilities.
+- Google Gemini 2.5 Flash driving `computer` and `bash` tools via function calling.
 - Remote desktop environment running in a [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) with Chrome, a window manager, and VNC streaming.
 - [shadcn/ui](https://ui.shadcn.com/) components for a modern, responsive UI powered by [Tailwind CSS](https://tailwindcss.com).
 - Built with the latest [Next.js](https://nextjs.org) App Router.
@@ -32,12 +32,12 @@ The app spins up a Vercel Sandbox from a pre-built snapshot that includes:
 - **Google Chrome** — auto-launched so the AI agent has a browser ready
 - **xdotool + ImageMagick** — for mouse/keyboard control and screenshots
 
-When a user sends a message, Claude uses the `computer` tool (screenshot, click, type, scroll) and the `bash` tool (run shell commands) to interact with the sandbox desktop. The noVNC stream is displayed in a resizable iframe alongside the chat.
+When a user sends a message, Gemini uses the `computer` tool (screenshot, click, type, scroll) and the `bash` tool (run shell commands) to interact with the sandbox desktop. The noVNC stream is displayed in a resizable iframe alongside the chat.
 
 ### Architecture
 
 ```
-User ↔ Next.js Chat UI ↔ AI SDK ↔ Claude Sonnet 4.5
+User ↔ Next.js Chat UI ↔ AI SDK ↔ Google Gemini 2.5 Flash
                                         ↓
                                   Vercel Sandbox
                               ┌─────────────────────┐
@@ -54,7 +54,7 @@ User ↔ Next.js Chat UI ↔ AI SDK ↔ Claude Sonnet 4.5
 
 You can deploy your own version to Vercel by clicking the button below:
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?project-name=AI+SDK+Computer+Use+Demo&repository-name=ai-sdk-computer-use&repository-url=https%3A%2F%2Fgithub.com%2Fvercel-labs%2Fai-sdk-computer-use&demo-title=AI+SDK+Computer+Use+Demo&demo-url=https%3A%2F%2Fai-sdk-computer-use.vercel.app%2F&demo-description=A+chatbot+application+built+with+Next.js+demonstrating+Anthropic+Claude+Sonnet+4.5+computer+use+capabilities+with+Vercel+Sandboxes&env=ANTHROPIC_API_KEY,SANDBOX_SNAPSHOT_ID)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?project-name=AI+SDK+Computer+Use+Demo&repository-name=ai-sdk-computer-use&repository-url=https%3A%2F%2Fgithub.com%2Fvercel-labs%2Fai-sdk-computer-use&demo-title=AI+SDK+Computer+Use+Demo&demo-url=https%3A%2F%2Fai-sdk-computer-use.vercel.app%2F&demo-description=A+chatbot+application+built+with+Next.js+demonstrating+Google+Gemini+computer+use+capabilities+with+Vercel+Sandboxes&env=GOOGLE_GENERATIVE_AI_API_KEY,SANDBOX_SNAPSHOT_ID)
 
 ## Running Locally
 
@@ -62,7 +62,7 @@ You can deploy your own version to Vercel by clicking the button below:
 
 - Node.js 18+
 - A [Vercel](https://vercel.com) account (for Sandbox access)
-- An [Anthropic API key](https://console.anthropic.com/)
+- A [Google Generative AI API key](https://aistudio.google.com/apikey)
 
 ### 1. Install dependencies
 
@@ -98,10 +98,10 @@ This takes ~10 minutes. When done, it outputs a snapshot ID. Add it to your `.en
 SANDBOX_SNAPSHOT_ID=snap_xxxxxxxxxxxxx
 ```
 
-### 4. Add your Anthropic API key
+### 4. Add your Google Generative AI API key
 
 ```
-ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_GENERATIVE_AI_API_KEY=...
 ```
 
 ### 5. Start the dev server
@@ -116,7 +116,7 @@ Open [http://localhost:3000](http://localhost:3000) to use the computer use agen
 
 | Variable | Required | Description |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Yes | Anthropic API key for Claude |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | Yes | Google Generative AI API key for Gemini |
 | `SANDBOX_SNAPSHOT_ID` | Yes | Vercel Sandbox snapshot with the desktop environment |
 | `VERCEL_OIDC_TOKEN` | Yes* | Auto-set by `vercel env pull` for Sandbox auth |
 | `VERCEL_TOKEN` | Alt* | Alternative to OIDC — a Vercel personal access token |

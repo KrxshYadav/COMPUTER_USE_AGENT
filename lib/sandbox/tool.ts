@@ -1,4 +1,5 @@
-import { anthropic } from "@ai-sdk/anthropic";
+import { tool } from "ai";
+import { z } from "zod";
 import { getDesktop } from "./utils";
 
 const wait = async (seconds: number) => {
@@ -57,20 +58,87 @@ function mapKey(key: string): string {
   return keyMap[key.toLowerCase()] || keyMap[key] || key;
 }
 
+// Provider-agnostic schema for the computer tool. The original implementation
+// relied on Anthropic's provider-defined `computer_20250124` tool, which Gemini
+// cannot interpret. We declare the same action surface explicitly so any
+// function-calling model (here: Gemini) can drive it.
+const computerInputSchema = z.object({
+  action: z
+    .enum([
+      "screenshot",
+      "wait",
+      "left_click",
+      "double_click",
+      "right_click",
+      "mouse_move",
+      "type",
+      "key",
+      "scroll",
+      "left_click_drag",
+    ])
+    .describe("The computer action to perform."),
+  // Coordinates are flat scalar fields, NOT arrays. Gemini's function-calling
+  // schema rejects fixed-length array (tuple) parameters outright ("Unknown
+  // name items"), and is more reliable filling discrete numbers than arrays of
+  // primitives. Origin (0,0) is the top-left corner.
+  x: z
+    .number()
+    .optional()
+    .describe("X target pixel for click/move/drag actions, e.g. 512."),
+  y: z
+    .number()
+    .optional()
+    .describe("Y target pixel for click/move/drag actions, e.g. 384."),
+  start_x: z
+    .number()
+    .optional()
+    .describe("X start pixel for a left_click_drag action, e.g. 100."),
+  start_y: z
+    .number()
+    .optional()
+    .describe("Y start pixel for a left_click_drag action, e.g. 200."),
+  text: z
+    .string()
+    .optional()
+    .describe("Text to type, or the key/chord (e.g. 'ctrl+c') for key action."),
+  duration: z
+    .number()
+    .optional()
+    .describe("Seconds to wait for the wait action."),
+  scroll_amount: z
+    .number()
+    .optional()
+    .describe("Number of scroll clicks for the scroll action."),
+  scroll_direction: z
+    .enum(["up", "down", "left", "right"])
+    .optional()
+    .describe("Direction to scroll for the scroll action."),
+});
+
+type ComputerResult =
+  | { type: "image"; data: string }
+  | { type: "text"; text: string };
+
 export const computerTool = (sandboxId: string) =>
-  anthropic.tools.computer_20250124({
-    displayWidthPx: resolution.x,
-    displayHeightPx: resolution.y,
-    displayNumber: 1,
+  tool({
+    description:
+      `Use a mouse and keyboard to interact with a ${resolution.x}x${resolution.y} ` +
+      "computer screen, and take screenshots. The origin (0,0) is the top-left " +
+      "corner. Take a screenshot only when you need to see the current state to " +
+      "decide where to click or type, or when the user asks for one — not after " +
+      "every action.",
+    inputSchema: computerInputSchema,
     execute: async ({
       action,
-      coordinate,
+      x,
+      y,
       text,
       duration,
       scroll_amount,
       scroll_direction,
-      start_coordinate,
-    }) => {
+      start_x,
+      start_y,
+    }): Promise<ComputerResult> => {
       const sandbox = await getDesktop(sandboxId);
 
       switch (action) {
@@ -100,9 +168,8 @@ export const computerTool = (sandboxId: string) =>
           };
         }
         case "left_click": {
-          if (!coordinate)
-            throw new Error("Coordinate required for left click action");
-          const [x, y] = coordinate;
+          if (x === undefined || y === undefined)
+            throw new Error("x and y required for left click action");
           await sandbox.runCommand({
             cmd: "xdotool",
             args: ["mousemove", "--sync", String(x), String(y), "click", "1"],
@@ -111,9 +178,8 @@ export const computerTool = (sandboxId: string) =>
           return { type: "text" as const, text: `Left clicked at ${x}, ${y}` };
         }
         case "double_click": {
-          if (!coordinate)
-            throw new Error("Coordinate required for double click action");
-          const [x, y] = coordinate;
+          if (x === undefined || y === undefined)
+            throw new Error("x and y required for double click action");
           await sandbox.runCommand({
             cmd: "xdotool",
             args: [
@@ -134,9 +200,8 @@ export const computerTool = (sandboxId: string) =>
           };
         }
         case "right_click": {
-          if (!coordinate)
-            throw new Error("Coordinate required for right click action");
-          const [x, y] = coordinate;
+          if (x === undefined || y === undefined)
+            throw new Error("x and y required for right click action");
           await sandbox.runCommand({
             cmd: "xdotool",
             args: ["mousemove", "--sync", String(x), String(y), "click", "3"],
@@ -148,9 +213,8 @@ export const computerTool = (sandboxId: string) =>
           };
         }
         case "mouse_move": {
-          if (!coordinate)
-            throw new Error("Coordinate required for mouse move action");
-          const [x, y] = coordinate;
+          if (x === undefined || y === undefined)
+            throw new Error("x and y required for mouse move action");
           await sandbox.runCommand({
             cmd: "xdotool",
             args: ["mousemove", "--sync", String(x), String(y)],
@@ -195,22 +259,27 @@ export const computerTool = (sandboxId: string) =>
           };
         }
         case "left_click_drag": {
-          if (!start_coordinate || !coordinate)
-            throw new Error("Coordinates required for drag action");
-          const [startX, startY] = start_coordinate;
-          const [endX, endY] = coordinate;
+          if (
+            start_x === undefined ||
+            start_y === undefined ||
+            x === undefined ||
+            y === undefined
+          )
+            throw new Error(
+              "start_x, start_y, x and y required for drag action",
+            );
           await sandbox.runCommand({
             cmd: "xdotool",
             args: [
               "mousemove",
-              String(startX),
-              String(startY),
+              String(start_x),
+              String(start_y),
               "mousedown",
               "1",
               "mousemove",
               "--sync",
-              String(endX),
-              String(endY),
+              String(x),
+              String(y),
               "mouseup",
               "1",
             ],
@@ -218,35 +287,45 @@ export const computerTool = (sandboxId: string) =>
           });
           return {
             type: "text" as const,
-            text: `Dragged mouse from ${startX}, ${startY} to ${endX}, ${endY}`,
+            text: `Dragged mouse from ${start_x}, ${start_y} to ${x}, ${y}`,
           };
         }
         default:
           throw new Error(`Unsupported action: ${action}`);
       }
     },
-    experimental_toToolResultContent(result) {
-      if (typeof result === "string") {
-        return [{ type: "text", text: result }];
+    // Convert the tool output into the parts the model sees. Gemini accepts
+    // image data inside a functionResponse (the AI SDK maps `image-data` to
+    // Gemini `inlineData`), so screenshots are passed through as images.
+    toModelOutput({ output }) {
+      if (output.type === "image" && output.data) {
+        return {
+          type: "content",
+          value: [
+            {
+              type: "image-data",
+              data: output.data,
+              mediaType: "image/png",
+            },
+          ],
+        };
       }
-      if (result.type === "image" && result.data) {
-        return [
-          {
-            type: "image",
-            data: result.data,
-            mimeType: "image/png",
-          },
-        ];
-      }
-      if (result.type === "text" && result.text) {
-        return [{ type: "text", text: result.text }];
+      if (output.type === "text" && output.text) {
+        return { type: "content", value: [{ type: "text", text: output.text }] };
       }
       throw new Error("Invalid result format");
     },
   });
 
 export const bashTool = (sandboxId?: string) =>
-  anthropic.tools.bash_20250124({
+  tool({
+    description:
+      "Run a bash command on the computer and return its stdout. Use this to " +
+      "create files and folders or run any shell command. Prefer this tool " +
+      "whenever it is viable for the task.",
+    inputSchema: z.object({
+      command: z.string().describe("The bash command to run."),
+    }),
     execute: async ({ command }) => {
       const sandbox = await getDesktop(sandboxId);
 

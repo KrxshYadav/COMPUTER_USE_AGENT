@@ -26,23 +26,18 @@ export default function Chat() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [sandboxId, setSandboxId] = useState<string | null>(null);
+  const [input, setInput] = useState("");
 
   const {
     messages,
-    input,
-    handleInputChange,
-    handleSubmit,
     status,
     stop: stopGeneration,
-    append,
+    sendMessage,
     setMessages,
   } = useChat({
-    api: "/api/chat",
+    // The default transport POSTs to /api/chat; the sandboxId is attached
+    // per-message below so it always reflects the current desktop.
     id: sandboxId ?? undefined,
-    body: {
-      sandboxId,
-    },
-    maxSteps: 30,
     onError: (error) => {
       console.error(error);
       toast.error("There was an error", {
@@ -53,14 +48,33 @@ export default function Chat() {
     },
   });
 
+  const handleInputChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => setInput(event.target.value);
+
+  const submitPrompt = (text: string) => {
+    if (!text.trim()) return;
+    sendMessage({ text }, { body: { sandboxId } });
+  };
+
+  const handleSubmit = (event?: React.FormEvent) => {
+    event?.preventDefault();
+    if (!input.trim()) return;
+    submitPrompt(input);
+    setInput("");
+  };
+
   const stop = () => {
     stopGeneration();
 
     const lastMessage = messages.at(-1);
-    const lastMessageLastPart = lastMessage?.parts.at(-1);
+    const lastPart = lastMessage?.parts.at(-1);
     if (
       lastMessage?.role === "assistant" &&
-      lastMessageLastPart?.type === "tool-invocation"
+      lastPart &&
+      (lastPart.type === "tool-computer" || lastPart.type === "tool-bash") &&
+      (lastPart.state === "input-streaming" ||
+        lastPart.state === "input-available")
     ) {
       setMessages((prev) => [
         ...prev.slice(0, -1),
@@ -68,16 +82,9 @@ export default function Chat() {
           ...lastMessage,
           parts: [
             ...lastMessage.parts.slice(0, -1),
-            {
-              ...lastMessageLastPart,
-              toolInvocation: {
-                ...lastMessageLastPart.toolInvocation,
-                state: "result",
-                result: ABORTED,
-              },
-            },
+            { ...lastPart, state: "output-error", errorText: ABORTED },
           ],
-        },
+        } as (typeof prev)[number],
       ]);
     }
   };
@@ -241,9 +248,7 @@ export default function Chat() {
             {messages.length === 0 && (
               <PromptSuggestions
                 disabled={isInitializing}
-                submitPrompt={(prompt: string) =>
-                  append({ role: "user", content: prompt })
-                }
+                submitPrompt={(prompt: string) => submitPrompt(prompt)}
               />
             )}
             <div className="bg-white">
@@ -289,9 +294,7 @@ export default function Chat() {
         {messages.length === 0 && (
           <PromptSuggestions
             disabled={isInitializing}
-            submitPrompt={(prompt: string) =>
-              append({ role: "user", content: prompt })
-            }
+            submitPrompt={(prompt: string) => submitPrompt(prompt)}
           />
         )}
         <div className="bg-white">

@@ -14,25 +14,21 @@ export const prunedMessages = (messages: UIMessage[]): UIMessage[] => {
   }
 
   return messages.map((message) => {
-    // check if last message part is a tool invocation in a call state, then append a part with the tool result
+    // Redact completed screenshot results from history to save input tokens.
+    // In AI SDK v6, tool parts are typed as `tool-<name>` with input/output.
     message.parts = message.parts.map((part) => {
-      if (part.type === "tool-invocation") {
-        if (
-          part.toolInvocation.toolName === "computer" &&
-          part.toolInvocation.args.action === "screenshot"
-        ) {
-          return {
-            ...part,
-            toolInvocation: {
-              ...part.toolInvocation,
-              result: {
-                type: "text",
-                text: "Image redacted to save input tokens",
-              },
-            },
-          };
-        }
-        return part;
+      if (
+        part.type === "tool-computer" &&
+        part.state === "output-available" &&
+        (part.input as { action?: string } | undefined)?.action === "screenshot"
+      ) {
+        return {
+          ...part,
+          output: {
+            type: "text",
+            text: "Image redacted to save input tokens",
+          },
+        };
       }
       return part;
     });
