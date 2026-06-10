@@ -11,7 +11,7 @@ import { bashTool, computerTool } from "@/lib/sandbox/tool";
 import { prunedMessages } from "@/lib/utils";
 
 // Allow streaming responses up to 5 minutes
-export const maxDuration = 300;
+export const maxDuration = 200;
 
 const SYSTEM_PROMPT = `You are an autonomous computer-use agent. You control a real desktop with a mouse and keyboard (via the \`computer\` tool) and a shell (via the \`bash\` tool). Your job is to fully complete the user's request end to end, not just the first step.
 
