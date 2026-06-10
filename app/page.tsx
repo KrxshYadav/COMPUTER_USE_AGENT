@@ -89,7 +89,10 @@ export default function Chat() {
     }
   };
 
-  const isLoading = status !== "ready";
+  // Only "submitted"/"streaming" mean a request is in flight. "error" must NOT
+  // count as loading, otherwise the input stays disabled after a failed/quota-
+  // exceeded request and the user is forced to reload the page to type again.
+  const isLoading = status === "submitted" || status === "streaming";
 
   const refreshDesktop = async () => {
     try {
